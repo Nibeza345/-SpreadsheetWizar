@@ -19,7 +19,8 @@ def process_workbook(filename, sheet_name=None, adjustment_factor=0.9, create_ba
     - create_backup (bool, optional): Whether to create a backup of the workbook before saving (default is True).
     """
     try:
-   
+        logging.info(f"Starting to process workbook: {filename}")
+
         wb = xl.load_workbook(filename)
         
         if sheet_name:
@@ -31,31 +32,28 @@ def process_workbook(filename, sheet_name=None, adjustment_factor=0.9, create_ba
             sheet = wb.active
             logging.info(f"No sheet name provided, using the first sheet: '{sheet.title}'")
         
-        
+        # Create backup if specified
         if create_backup:
             backup_filename = f"{filename}.backup"
             shutil.copyfile(filename, backup_filename)
             logging.info(f"Backup created at '{backup_filename}'")
         
-    
-        for row in range(2, sheet.max_row + 1):
-            cell = sheet.cell(row, 3)  
-            if isinstance(cell.value, (int, float)):
-                corrected_price = cell.value * adjustment_factor  
-                corrected_price_cell = sheet.cell(row, 4)  
-                corrected_price_cell.value = corrected_price
-            else:
-                logging.warning(f"Non-numeric value in row {row}, column 3.")
+        changes_made = False
         
-        values = Reference(
-            sheet,
-            min_row=2,
-            max_row=sheet.max_row,
-            min_col=4,  
-            max_col=4
-        )
+        # Adjust prices and insert corrected prices in column 4
+        for row in range(2, sheet.max_row + 1):
+            price_cell = sheet.cell(row, 3)  # Column 3 holds original prices
+            if isinstance(price_cell.value, (int, float)):
+                corrected_price = price_cell.value * adjustment_factor
+                corrected_price_cell = sheet.cell(row, 4)  # Column 4 holds corrected prices
+                corrected_price_cell.value = corrected_price
+                changes_made = True
+            else:
+                logging.warning(f"Non-numeric or empty value in row {row}, column 3: {price_cell.value}")
 
+        # Add a bar chart for corrected prices if data exists
         if sheet.max_row > 1:
+            values = Reference(sheet, min_row=2, max_row=sheet.max_row, min_col=4, max_col=4)
             chart = BarChart()
             chart.add_data(values, titles_from_data=False)
             chart.title = "Corrected Prices Chart"
@@ -66,13 +64,17 @@ def process_workbook(filename, sheet_name=None, adjustment_factor=0.9, create_ba
         else:
             logging.warning("No data to create a chart.")
         
-        wb.save(filename)
-        logging.info(f"Workbook '{filename}' processed successfully and saved.")
-    
+        # Save only if there are changes
+        if changes_made:
+            wb.save(filename)
+            logging.info(f"Workbook '{filename}' processed successfully and saved.")
+        else:
+            logging.info(f"No changes made to the workbook '{filename}', so it was not saved.")
+
     except FileNotFoundError:
         logging.error(f"Error: File '{filename}' not found.")
     except Exception as e:
         logging.error(f"An error occurred: {e}")
 
-
+# Example usage
 process_workbook('transactions.xlsx')
